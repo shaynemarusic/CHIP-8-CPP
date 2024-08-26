@@ -1,10 +1,12 @@
 #include <iostream>
 #include <SDL.h>
+#include <fstream>
 
-int main() {
+//TODO add command line args to take the name of ROM files to be loaded
+int main(int argc, char *argv []) {
     //RAM - 4096 bytes or 4 kB
     //Program space starts at address 200
-    unsigned char memory [4096];
+    char * memory [4096];
     //64x32 pixel display which can be either black or white
     bool display [64][32];
     //Points to locations in memory - 16 bits/2 bytes
@@ -40,7 +42,36 @@ int main() {
 
     //Loading font data into memory. Convention is to start storing the font data at 0x050 (0d80)
     for (unsigned int i = 0; i < 80; i++) {
-        memory[i + 80] = font[i];
+
+        *memory[i + 80] = font[i];
+
     }
+
+    //Load the ROM data into memory
+    std::fstream rom;
+    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
+
+    if (rom.is_open()) {
+
+        unsigned int i = 0;
+        int size = rom.tellg();
+        rom.seekg(0, std::ios::beg);
+
+        while (i < size) {
+
+            rom.read(memory[i + 512], 1);
+            i++;
+
+        }
+
+    }
+    else {
+
+        std::cout << "Error: ROM could not be opened. Please make sure the file path is correct." << std::endl;
+
+    }
+
+    
+
     return 0;
 }
