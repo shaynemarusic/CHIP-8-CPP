@@ -14,10 +14,14 @@ int main(int argc, char *argv []) {
     unsigned short indexRegister;
     //Used for calling functions/subroutines
     unsigned short stack [16];
+    //The program counter. Keeps track of which instruction should be fetched from memory. Program memory starts at 0x200
+    unsigned short programCounter = 0x200;
     //Decremented at a rate of 60 Hz until it reaches 0
     unsigned char delayTimer;
     //Like the delay timer but it makes a sound when it's not 0
     unsigned char soundTimer;
+    //Keeps the main loop running
+    bool running = true;
     //TODO - 16 8 bit registers. Unsure if I want this as an array of unsigned chars or as an unordered map mapping each register name to it's content
 
     //Font data
@@ -71,7 +75,57 @@ int main(int argc, char *argv []) {
 
     }
 
-    
+    //The main loop
+    while (running) {
+
+        //Fetch an instruction from memory
+        char upper, lower;
+        upper = *memory[programCounter];
+        lower = *memory[programCounter + 1];
+
+        //Increment program counter by two to prepare to fetch next instruction
+        programCounter += 2;
+
+        //Instruction decode
+        //First nibble of the instruction determines which instruction category is being run
+        switch (upper & 0xF0) {
+
+            case 0x00:
+                break;
+            case 0x10:
+                break;
+            case 0x20:
+                break;
+            case 0x30:
+                break;
+            case 0x40:
+                break;
+            case 0x50:
+                break;
+            case 0x60:
+                break;
+            case 0x70:
+                break;
+            case 0x80:
+                break;
+            case 0x90:
+                break;
+            case 0xA0:
+                break;
+            case 0xB0:
+                break;
+            case 0xC0:
+                break;
+            case 0xD0:
+                break;
+            case 0xE0:
+                break;
+            case 0xF0:
+                break;
+
+        }
+        
+    }
 
     return 0;
 }
