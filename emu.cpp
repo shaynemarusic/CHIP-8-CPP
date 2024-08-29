@@ -22,7 +22,8 @@ int main(int argc, char *argv []) {
     unsigned char soundTimer;
     //Keeps the main loop running
     bool running = true;
-    //TODO - 16 8 bit registers. Unsure if I want this as an array of unsigned chars or as an unordered map mapping each register name to it's content
+    //TODO - 16 8 bit registers. Registers are labled V0 to VF. Note: VF is a special register that is used as a flag register
+    short registers [16];
 
     //Font data
     unsigned char font [80] = {
@@ -90,9 +91,20 @@ int main(int argc, char *argv []) {
         //First nibble of the instruction determines which instruction category is being run
         switch (upper & 0xF0) {
 
+            //Execute machine language routine and clear screen instructions
             case 0x00:
+                switch ((((short) upper & 0x0F) << 4) | (short) lower) {
+                    //Clear instruction - sets all pixels to off
+                    case 0x00E0:
+                        break;
+                    //Execute machine language routine - doesn't need to be implemented
+                    default:
+                        break;
+                }
                 break;
+            //Jump instruction - takes the form 1NNN where NNN is the address the program counter is set to
             case 0x10:
+                programCounter = (((short) upper & 0x0F) << 4) | lower;
                 break;
             case 0x20:
                 break;
@@ -102,21 +114,37 @@ int main(int argc, char *argv []) {
                 break;
             case 0x50:
                 break;
+            //Set register instruction - takes the form 6XNN; sets the register VX to the value NN
             case 0x60:
+                short reg = upper & 0x0F;
+                registers[reg] = lower;
                 break;
+            //Add instruction - takes the form 7XNN; adds NN to the register VX
             case 0x70:
+                short reg = upper & 0x0F;
+                registers[reg] += lower;
                 break;
             case 0x80:
                 break;
             case 0x90:
                 break;
+            //Set index register instruction - takes the form ANNN; sets I to NNNN;
             case 0xA0:
+                indexRegister = (((short) upper & 0x0F) << 4) | lower;
                 break;
             case 0xB0:
                 break;
             case 0xC0:
                 break;
+            //Display instruction - takes the form DXYN; draws an N pixel tall sprite from the memory location stored at the index register
+            //to the horizontal coordinate stored in VX and vertical coordinate stored in VY. If any pixels are turned off, then VF is set
+            //to 1 (otherwise set to 0)
             case 0xD0:
+                char X = upper & 0x0F;
+                char Y = lower & 0xF0;
+                char N = lower & 0x0F;
+                short xCoord = registers[X];
+                short yCoord = registers[Y];
                 break;
             case 0xE0:
                 break;
@@ -124,7 +152,7 @@ int main(int argc, char *argv []) {
                 break;
 
         }
-        
+
     }
 
     return 0;
