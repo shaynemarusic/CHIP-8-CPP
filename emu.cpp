@@ -1,5 +1,5 @@
 #include <iostream>
-#include <SDL.h>
+#include "./SDL2/include/SDL.h"
 #include <fstream>
 
 //TODO add command line args to take the name of ROM files to be loaded
@@ -51,6 +51,22 @@ int main(int argc, char *argv []) {
         *memory[i + 80] = font[i];
 
     }
+
+    //Initialize SDL
+    if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+
+        printf("Error initializing SDL: %s\n", SDL_GetError());
+
+    }
+
+    //Create the SDL window
+    SDL_Window * win = SDL_CreateWindow("CHIP8", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 64, 32, 0);
+
+    SDL_Surface * surface = SDL_GetWindowSurface(win);
+
+    SDL_ShowWindow(win);
+
+    while (true);
 
     //Load the ROM data into memory
     std::fstream rom;
@@ -116,13 +132,17 @@ int main(int argc, char *argv []) {
                 break;
             //Set register instruction - takes the form 6XNN; sets the register VX to the value NN
             case 0x60:
+                {
                 short reg = upper & 0x0F;
                 registers[reg] = lower;
+                }
                 break;
             //Add instruction - takes the form 7XNN; adds NN to the register VX
             case 0x70:
+                {
                 short reg = upper & 0x0F;
                 registers[reg] += lower;
+                }
                 break;
             case 0x80:
                 break;
@@ -140,11 +160,40 @@ int main(int argc, char *argv []) {
             //to the horizontal coordinate stored in VX and vertical coordinate stored in VY. If any pixels are turned off, then VF is set
             //to 1 (otherwise set to 0)
             case 0xD0:
+                {
                 char X = upper & 0x0F;
                 char Y = lower & 0xF0;
                 char N = lower & 0x0F;
-                short xCoord = registers[X];
-                short yCoord = registers[Y];
+                short xCoord = registers[X] & 63;
+                short yCoord = registers[Y] & 31;
+                
+                registers[0xF] = 0;
+
+                for (unsigned int i = 0; i < N; i++) {
+
+                    if (Y + i > 31) break;
+
+                    char spriteData = *memory[indexRegister + i];
+
+                    for (unsigned int j = 0; j < 8; j++) {
+
+                        if (X + j > 63) break;
+
+                        //If the pixel is already on and the pixel in the sprite row is on, turn off the pixel and set VF to 1
+                        if (display[X + j][Y + i] && ((spriteData << j) & 0x80) == 0x80) {
+
+                            registers[0xF] = 1;
+                            display[X + j][Y + i] = false;
+
+                        }
+                        else if (((spriteData << j) & 0x80) == 0x80) display[X + j][Y + i] = true;
+
+                    }
+
+                }
+
+                //TODO - draw the screen with SDL
+                }
                 break;
             case 0xE0:
                 break;
@@ -155,5 +204,11 @@ int main(int argc, char *argv []) {
 
     }
 
+    rom.close();
+
+    return 0;
+}
+
+int WinMain() {
     return 0;
 }
