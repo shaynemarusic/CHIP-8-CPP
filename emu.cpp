@@ -2,11 +2,14 @@
 #include "./SDL2/include/SDL.h"
 #include <fstream>
 
+#undef main
+
 //TODO add command line args to take the name of ROM files to be loaded
 int main(int argc, char *argv []) {
+    printf("Test test");
     //RAM - 4096 bytes or 4 kB
     //Program space starts at address 200
-    char * memory [4096];
+    char * memory = new char[4096];
     //64x32 pixel display which can be either black or white
     bool display [64][32];
     //Points to locations in memory - 16 bits/2 bytes
@@ -45,12 +48,16 @@ int main(int argc, char *argv []) {
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
 
+    printf("This is a test\n");
+
     //Loading font data into memory. Convention is to start storing the font data at 0x050 (0d80)
     for (unsigned int i = 0; i < 80; i++) {
 
-        *memory[i + 80] = font[i];
+        (memory[i + 80]) = font[i];
 
     }
+
+    printf("memory[1]: %d", memory[1]);
 
     //Initialize SDL
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -80,7 +87,7 @@ int main(int argc, char *argv []) {
 
         while (i < size) {
 
-            rom.read(memory[i + 512], 1);
+            rom.read((char *)(&memory[i + 512]), 1);
             i++;
 
         }
@@ -97,8 +104,8 @@ int main(int argc, char *argv []) {
 
         //Fetch an instruction from memory
         char upper, lower;
-        upper = *memory[programCounter];
-        lower = *memory[programCounter + 1];
+        upper = memory[programCounter];
+        lower = memory[programCounter + 1];
 
         //Increment program counter by two to prepare to fetch next instruction
         programCounter += 2;
@@ -173,7 +180,7 @@ int main(int argc, char *argv []) {
 
                     if (Y + i > 31) break;
 
-                    char spriteData = *memory[indexRegister + i];
+                    char spriteData = memory[indexRegister + i];
 
                     for (unsigned int j = 0; j < 8; j++) {
 
@@ -206,9 +213,5 @@ int main(int argc, char *argv []) {
 
     rom.close();
 
-    return 0;
-}
-
-int WinMain() {
     return 0;
 }

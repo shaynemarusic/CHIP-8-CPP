@@ -6,10 +6,16 @@
             "command": "C:\\MinGW\\mingw64\\bin\\g++.exe",
             "args": [
                 "-fdiagnostics-color=always",
+                "-I",
+                "./SDL2/include",
+                "-L",
+                "./SDL2/lib/x64",
                 "-g",
                 "${file}",
                 "-o",
-                "${fileDirname}\\${fileBasenameNoExtension}.exe"
+                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "-lmingw32",
+                "./SDL2/lib/x64/SDL2.dll"
             ],
             "options": {
                 "cwd": "${fileDirname}"

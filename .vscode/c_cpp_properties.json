@@ -4,7 +4,8 @@
             "name": "Win32",
             "includePath": [
                 "${default}",
-                "C:\\Users\\shayn\\CHIP-8\\CHIP-8-CPP\\SDL2\\include"
+                "C:\\Users\\shayn\\CHIP-8\\CHIP-8-CPP\\SDL2\\include",
+                "C:\\Users\\shayn\\CHIP-8\\CHIP-8-CPP\\SDL2\\lib\\x86"
             ],
             "defines": [
                 "_DEBUG",
