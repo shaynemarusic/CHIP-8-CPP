@@ -4,9 +4,11 @@
 
 #undef main
 
+const int SCREEN_WIDTH = 640, SCREEN_HEIGHT = 320, LOGICAL_WIDTH = 64, LOGICAL_HEIGHT = 32;
+
 //TODO add command line args to take the name of ROM files to be loaded
 int main(int argc, char *argv []) {
-    printf("Test test");
+    //printf("Test test");
     //RAM - 4096 bytes or 4 kB
     //Program space starts at address 200
     char * memory = new char[4096];
@@ -48,7 +50,7 @@ int main(int argc, char *argv []) {
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
 
-    printf("This is a test\n");
+    //printf("This is a test\n");
 
     //Loading font data into memory. Convention is to start storing the font data at 0x050 (0d80)
     for (unsigned int i = 0; i < 80; i++) {
@@ -57,7 +59,7 @@ int main(int argc, char *argv []) {
 
     }
 
-    printf("memory[1]: %d", memory[1]);
+    printf("memory[1]: %d\n", memory[1]);
 
     //Initialize SDL
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -66,14 +68,39 @@ int main(int argc, char *argv []) {
 
     }
 
-    //Create the SDL window
-    SDL_Window * win = SDL_CreateWindow("CHIP8", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 64, 32, 0);
+    //Create the SDL window and renderer
+    SDL_Window * win = NULL;
+    SDL_Renderer * render = NULL;
 
-    SDL_Surface * surface = SDL_GetWindowSurface(win);
+    win = SDL_CreateWindow("CHIP8", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
 
-    SDL_ShowWindow(win);
+    if (win == NULL) {
 
-    while (true);
+        printf("Error creating SDL window: %s\n", SDL_GetError());
+
+    }
+
+    render = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
+
+    if (render == NULL) {
+
+        printf("Error creating SDL renderer: %s\n", SDL_GetError());
+
+    }
+    
+    SDL_RenderSetLogicalSize(render, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+    // //Test code
+
+    // SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
+    // SDL_RenderClear(render);
+
+    // SDL_SetRenderDrawColor(render, 255, 255, 255, 255);
+    // SDL_RenderDrawPoint(render, 0, 0);
+
+    // SDL_RenderPresent(render);
+
+    // SDL_Delay(10000);
 
     //Load the ROM data into memory
     std::fstream rom;
@@ -96,6 +123,7 @@ int main(int argc, char *argv []) {
     else {
 
         std::cout << "Error: ROM could not be opened. Please make sure the file path is correct." << std::endl;
+        return -1;
 
     }
 
@@ -184,22 +212,32 @@ int main(int argc, char *argv []) {
 
                     for (unsigned int j = 0; j < 8; j++) {
 
-                        if (X + j > 63) break;
+                        if (xCoord + j > 63) break;
 
                         //If the pixel is already on and the pixel in the sprite row is on, turn off the pixel and set VF to 1
-                        if (display[X + j][Y + i] && ((spriteData << j) & 0x80) == 0x80) {
+                        if (display[xCoord + j][yCoord + i] && ((spriteData << j) & 0x80) == 0x80) {
 
                             registers[0xF] = 1;
-                            display[X + j][Y + i] = false;
+                            display[xCoord + j][yCoord + i] = false;
+                            SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
+                            SDL_RenderDrawPoint(render, xCoord + j, yCoord + i);
 
                         }
-                        else if (((spriteData << j) & 0x80) == 0x80) display[X + j][Y + i] = true;
+                        //If the pixel in the sprite row is on but not already on, turn the pixel on
+                        else if (((spriteData << j) & 0x80) == 0x80) {
+
+                            display[xCoord + j][yCoord + i] = true;
+                            SDL_SetRenderDrawColor(render, 255, 255, 255, 255);
+                            SDL_RenderDrawPoint(render, xCoord + j, yCoord + i);
+
+                        }
 
                     }
 
                 }
 
-                //TODO - draw the screen with SDL
+                SDL_RenderPresent(render);
+                
                 }
                 break;
             case 0xE0:
