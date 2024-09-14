@@ -191,11 +191,39 @@ int main(int argc, char *argv []) {
                 break;
             case 0x20:
                 break;
+            //Conditional jump instruction - takes the form 3XNN where if the value of VX == NN then the next instruction is skipped
             case 0x30:
+                {
+                short reg = upper & 0x0F;
+                if (registers[reg] == lower) {
+
+                    programCounter += 2;
+
+                }
+                }
                 break;
+            //Conditional jump instruction - takes the form 4XNN where if the values of VX != NN then the next instruction is skipped
             case 0x40:
+                {
+                short reg = upper & 0x0F;
+                if (registers[reg] != lower) {
+
+                    programCounter += 2;
+
+                }
+                }
                 break;
+            //Conditional jump instruction - takes the form 5XY0 where if VX == VY then the next instruction is skipped
             case 0x50:
+                {
+                short X = upper & 0x0F;
+                short Y = (lower & 0xF0) >> 4;
+                if (registers[X] == registers[Y]) {
+
+                    programCounter += 2;
+
+                }
+                }
                 break;
             //Set register instruction - takes the form 6XNN; sets the register VX to the value NN
             case 0x60:
@@ -211,9 +239,65 @@ int main(int argc, char *argv []) {
                 registers[reg] += lower;
                 }
                 break;
+            //All 8000 instructions are arithmetic or logical - the exact instruction is determined by the lowest nibble; note that none of
+            //these instructions affect VY
             case 0x80:
+                switch (lower & 0x0F) {
+
+                    short X = upper & 0x0F;
+                    short Y = (lower & 0xF0) >> 4;
+
+                    //Set instruction - takes form 8XY0 and sets the value of VX to the value of VY
+                    case 0x00:
+                        registers[X] = registers[Y];
+                        break;
+                    //Binary OR instruction - takes form 8XY1 and sets the value of VX to VY | VX
+                    case 0x01:
+                        registers[X] = registers[X] | registers[Y];
+                        break;
+                    //Binary AND instruction - sets value of VX to VX & VY
+                    case 0x02:
+                        registers[X] = registers[X] & registers[Y];
+                        break;
+                    //Logical XOR - sets value of VX to VX XOR VY
+                    case 0x03:
+                        registers[X] = (~registers[X] & registers[Y]) | (registers[X] & ~registers[Y]);
+                        break;
+                    //Add - Sets the value of VX to VX + VY; affects carry flag
+                    case 0x04:
+                        unsigned short prev = registers[X];
+                        registers[X] += registers[Y];
+                        registers[0xF] = (prev > registers[X]) ? 1 : 0;
+                        break;
+                    //Subtract - sets the value of VX to VX - VY; VF is set to 1 if VX > VY
+                    case 0x05:
+                        registers[0xF] = (registers[X] > registers[Y]) ? 1 : 0;
+                        registers[X] -= registers[Y];
+                        break;
+                    //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+                    case 0x06:
+                        break;
+                    //Subtract - sets the value of VX to VY - VX; VF is set to 1 if VX < VY
+                    case 0x07:
+                        registers[0xF] = (registers[X] < registers[Y]) ? 1 : 0;
+                        registers[X] = registers[Y] - registers[X];
+                        break;
+                    case 0x0E:
+                        break;
+
+                }
                 break;
+            //Conditional jump instruction - takes the form 9XY0 where if VX != VY then the next instruction is skipped
             case 0x90:
+                {
+                short X = upper & 0x0F;
+                short Y = (lower & 0xF0) >> 4;
+                if (registers[X] != registers[Y]) {
+
+                    programCounter += 2;
+
+                }
+                }
                 break;
             //Set index register instruction - takes the form ANNN; sets I to NNNN;
             case 0xA0:
