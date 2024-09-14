@@ -59,7 +59,7 @@ int main(int argc, char *argv []) {
 
     }
 
-    printf("memory[1]: %d\n", memory[1]);
+    //printf("memory[1]: %d\n", memory[1]);
 
     //Initialize SDL
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -104,7 +104,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(".\\IBM Logo.ch8", std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -127,11 +127,32 @@ int main(int argc, char *argv []) {
 
     }
 
+    Uint8 memtest [4096];
+
+    for (int i = 0; i < 4096; i++) {
+        memtest[i] = memory[i];
+    }
+
     //The main loop
     while (running) {
 
+        //Allows user to close window
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+
+            switch(event.type) {
+
+                case SDL_QUIT:
+                    running = false;
+                    break;
+
+            }
+
+        }
+
         //Fetch an instruction from memory
-        char upper, lower;
+        Uint8 upper, lower;
+        Uint16 instruction;
         upper = memory[programCounter];
         lower = memory[programCounter + 1];
 
@@ -144,9 +165,20 @@ int main(int argc, char *argv []) {
 
             //Execute machine language routine and clear screen instructions
             case 0x00:
-                switch ((((short) upper & 0x0F) << 4) | (short) lower) {
+                switch ((((short) upper & 0x0F) << 8) | (short) lower) {
                     //Clear instruction - sets all pixels to off
                     case 0x00E0:
+                        SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
+                        SDL_RenderClear(render);
+                        for (int i = 0; i < 64; i++) {
+
+                            for (int j = 0; j < 32; j++) {
+
+                                display[i][j] = false;
+
+                            }
+
+                        }
                         break;
                     //Execute machine language routine - doesn't need to be implemented
                     default:
@@ -155,7 +187,7 @@ int main(int argc, char *argv []) {
                 break;
             //Jump instruction - takes the form 1NNN where NNN is the address the program counter is set to
             case 0x10:
-                programCounter = (((short) upper & 0x0F) << 4) | lower;
+                programCounter = (((short) upper & 0x0F) << 8) | lower;
                 break;
             case 0x20:
                 break;
@@ -185,7 +217,7 @@ int main(int argc, char *argv []) {
                 break;
             //Set index register instruction - takes the form ANNN; sets I to NNNN;
             case 0xA0:
-                indexRegister = (((short) upper & 0x0F) << 4) | lower;
+                indexRegister = (((short) upper & 0x0F) << 8) | (short) lower;
                 break;
             case 0xB0:
                 break;
@@ -197,7 +229,7 @@ int main(int argc, char *argv []) {
             case 0xD0:
                 {
                 char X = upper & 0x0F;
-                char Y = lower & 0xF0;
+                char Y = (lower & 0xF0) >> 4;
                 char N = lower & 0x0F;
                 short xCoord = registers[X] & 63;
                 short yCoord = registers[Y] & 31;
@@ -237,7 +269,7 @@ int main(int argc, char *argv []) {
                 }
 
                 SDL_RenderPresent(render);
-                
+
                 }
                 break;
             case 0xE0:
@@ -249,7 +281,12 @@ int main(int argc, char *argv []) {
 
     }
 
+    //Cleanup
     rom.close();
+    SDL_DestroyWindow(win);
+    SDL_DestroyRenderer(render);
+    SDL_Quit();
+    delete [] memory;
 
     return 0;
 }
