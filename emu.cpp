@@ -3,6 +3,7 @@
 #include <fstream>
 #include <random>
 #include <unordered_map>
+#include <stack>
 
 #undef main
 
@@ -29,8 +30,9 @@ int main(int argc, char *argv []) {
     unsigned char soundTimer;
     //Keeps the main loop running
     bool running = true;
-    //TODO - 16 8 bit registers. Registers are labled V0 to VF. Note: VF is a special register that is used as a flag register
-    short registers [16];
+    //16 8 bit registers. Registers are labled V0 to VF. Note: VF is a special register that is used as a flag register
+    Uint8 registers [16];
+    //Used for configuration purposes
     bool originalRightShift = true;
     bool originalLeftShift = true;
     bool originalOffsetJmp = true;
@@ -138,12 +140,6 @@ int main(int argc, char *argv []) {
         std::cout << "Error: ROM could not be opened. Please make sure the file path is correct." << std::endl;
         return -1;
 
-    }
-
-    Uint8 memtest [4096];
-
-    for (int i = 0; i < 4096; i++) {
-        memtest[i] = memory[i];
     }
 
     //The main loop
@@ -277,13 +273,17 @@ int main(int argc, char *argv []) {
                     //In later implementations, shift VX in place and ignore VY
                     case 0x06:
                         if (originalRightShift) {
+
                             registers[X] = registers[Y];
                             registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
                             registers[X] >> 1;
+
                         }
                         else {
+
                             registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
                             registers[X] >> 1;
+                            
                         }
                         break;
                     //Subtract - sets the value of VX to VY - VX; VF is set to 1 if VX < VY
@@ -296,13 +296,17 @@ int main(int argc, char *argv []) {
                     //In later implementations, shift VX in place and ignore VY
                     case 0x0E:
                         if (originalLeftShift) {
+
                             registers[X] = registers[Y];
                             registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
                             registers[X] << 1;
+
                         }
                         else {
+
                             registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
                             registers[X] << 1;
+
                         }
                         break;
 
@@ -394,11 +398,15 @@ int main(int argc, char *argv []) {
                     case 0x9E:
                         {
                         if (SDL_PollEvent(&event)) {
+
                             if (event.type == SDL_KEYDOWN) {
+
                                 SDL_Scancode sc = event.key.keysym.scancode;
                                 short hxVal = scanCodes[sc];
                                 programCounter += (hxVal == registers[X]) ? 2 : 0;
+
                             }
+
                         }
                         }
                         break;
@@ -407,18 +415,96 @@ int main(int argc, char *argv []) {
                     case 0xA1:
                         {
                         if (SDL_PollEvent(&event)) {
+
                             if (event.type == SDL_KEYDOWN) {
+
                                 SDL_Scancode sc = event.key.keysym.scancode;
                                 short hxVal = scanCodes[sc];
                                 programCounter += (hxVal != registers[X]) ? 2 : 0;
+
                             }
+
                         }
                         }
                         break;
                 }
                 break;
             //Timers and miscellaneous instructions
+            //All of these instructions take the form FX~~; in other words, they all interpret the 3rd nibble as a register
             case 0xF0:
+                switch (lower) {
+                    //These first three are timer related instructions
+                    //Sets VX equal to the value of the delay timer
+                    case 0x07:
+                        registers[X] = delayTimer;
+                        break;
+                    //Sets the delay timer equal to value in VX
+                    case 0x15:
+                        delayTimer = registers[X];
+                        break;
+                    //Sets the sound timer to the value in VX
+                    case 0x18:
+                        soundTimer = registers[X];
+                        break;
+                    //Add the value in VX to I
+                    //NOTE: in the original implementation this did not affect VF but this implementation will since some later
+                    //implementations expect this behavior
+                    case 0x1E:
+                        {
+                        unsigned short prev = indexRegister;
+                        indexRegister += registers[X];
+                        registers[0xF] = (prev > indexRegister) ? 1 : 0;
+                        }
+                        break;
+                    //Get key - this instruction blocks until a key is pressed (timers are still decremented regularly); once a key is
+                    //pressed its hex value is put in VX
+                    case 0x0A:
+                        {
+                        if (SDL_PollEvent(&event)) {
+
+                            if (event.type == SDL_KEYDOWN) {
+
+                                SDL_Scancode sc = event.key.keysym.scancode;
+                                int hxVal = scanCodes[sc];
+                                registers[X] = hxVal;
+
+                            }
+                            else {
+
+                                programCounter -= 2;
+
+                            }
+
+                        }
+                        else {
+
+                            programCounter -= 2;
+
+                        }
+                        }
+                        break;
+                    //Sets the index register to the address of the hex character in VX (meaning the character's font data); use the last
+                    //nibble of VX
+                    case 0x29:
+                        {
+                        int hexVal = registers[X] & 0xF;
+                        indexRegister = 80 + hexVal * 5;
+                        }
+                        break;
+                    //Store each individual digit of the number in VX starting at memory[indexRegister]
+                    case 0x33:
+                        {
+                        Uint8 num = registers[X];
+                        Uint8 digit;
+                        std::stack<Uint8> s;
+                        while (num > 0) {
+                            digit = num % 10;
+                        }
+                        }
+                        break;
+                    
+                    
+                }
                 break;
 
         }
