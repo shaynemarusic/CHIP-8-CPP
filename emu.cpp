@@ -1,6 +1,8 @@
 #include <iostream>
 #include "./SDL2/include/SDL.h"
 #include <fstream>
+#include <random>
+#include <unordered_map>
 
 #undef main
 
@@ -31,6 +33,7 @@ int main(int argc, char *argv []) {
     short registers [16];
     bool originalRightShift = true;
     bool originalLeftShift = true;
+    bool originalOffsetJmp = true;
 
     //Font data
     unsigned char font [80] = {
@@ -50,6 +53,14 @@ int main(int argc, char *argv []) {
     0xE0, 0x90, 0x90, 0x90, 0xE0, // D
     0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
+
+    //Maps SDL2 scancodes to the hex digits they would correspond to on a hex keypad
+    std::unordered_map<int, int> scanCodes = {
+        {SDL_SCANCODE_1, 1}, {SDL_SCANCODE_2, 2}, {SDL_SCANCODE_3, 3}, {SDL_SCANCODE_4, 0xC},
+        {SDL_SCANCODE_Q, 4}, {SDL_SCANCODE_W, 5}, {SDL_SCANCODE_E, 6}, {SDL_SCANCODE_R, 0xD},
+        {SDL_SCANCODE_A, 7}, {SDL_SCANCODE_S, 8}, {SDL_SCANCODE_D, 9}, {SDL_SCANCODE_F, 0xE},
+        {SDL_SCANCODE_Z, 0xA}, {SDL_SCANCODE_X, 0}, {SDL_SCANCODE_C, 0xB}, {SDL_SCANCODE_V, 0xF}
     };
 
     //printf("This is a test\n");
@@ -147,7 +158,7 @@ int main(int argc, char *argv []) {
                 case SDL_QUIT:
                     running = false;
                     break;
-
+    
             }
 
         }
@@ -309,9 +320,23 @@ int main(int argc, char *argv []) {
             case 0xA0:
                 indexRegister = (((short) upper & 0x0F) << 8) | (short) lower;
                 break;
+            //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+            //Jump with offset - Takes form DNNN in the original implementation; In the original implementation, jumps to address NNN plus
+            //the value of V0. In later implementations it takes the form DXNN and jumps to address XNN plus the value of VX
             case 0xB0:
+                {
+                    int jmp = (((short) upper & 0x0F) << 8) | (short) lower;
+                    programCounter = (originalOffsetJmp) ? jmp + registers[0] : jmp + registers[X];
+                }
                 break;
+            //Generate random number - Takes form CXNN; generates a random number, ANDs it with NN and puts the value in VX
             case 0xC0:
+                {
+                std::random_device dev;
+                std::mt19937 rng(dev());
+                std::uniform_int_distribution<std::mt19937::result_type> dist(-32768, 32767);
+                registers[X] = dist(rng) & lower;
+                }
                 break;
             //Display instruction - takes the form DXYN; draws an N pixel tall sprite from the memory location stored at the index register
             //to the horizontal coordinate stored in VX and vertical coordinate stored in VY. If any pixels are turned off, then VF is set
@@ -360,8 +385,39 @@ int main(int argc, char *argv []) {
 
                 }
                 break;
+            //Skip if instructions - both instructions skip based on if a key is currently being pressed or not
+            //CHIP 8 uses a hexidecimal keypad so each code corresponds to a hex digit
             case 0xE0:
+                switch (lower) {
+                    //Skip if key pressed - takes form EX9E; skips the next instruction if the key corresponding to the number in VX
+                    //is pressed
+                    case 0x9E:
+                        {
+                        if (SDL_PollEvent(&event)) {
+                            if (event.type == SDL_KEYDOWN) {
+                                SDL_Scancode sc = event.key.keysym.scancode;
+                                short hxVal = scanCodes[sc];
+                                programCounter += (hxVal == registers[X]) ? 2 : 0;
+                            }
+                        }
+                        }
+                        break;
+                    //Skip if not key pressed - takes form EXA1; skips the next instruction if the key corresponding to the number in VX
+                    //is not being pressed
+                    case 0xA1:
+                        {
+                        if (SDL_PollEvent(&event)) {
+                            if (event.type == SDL_KEYDOWN) {
+                                SDL_Scancode sc = event.key.keysym.scancode;
+                                short hxVal = scanCodes[sc];
+                                programCounter += (hxVal != registers[X]) ? 2 : 0;
+                            }
+                        }
+                        }
+                        break;
+                }
                 break;
+            //Timers and miscellaneous instructions
             case 0xF0:
                 break;
 
