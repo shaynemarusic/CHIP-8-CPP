@@ -498,7 +498,21 @@ int main(int argc, char *argv []) {
                         Uint8 digit;
                         std::stack<Uint8> s;
                         while (num > 0) {
+
                             digit = num % 10;
+                            s.push(digit);
+                            num /= 10;
+
+                        }
+
+                        digit = 0;
+
+                        while (!s.empty()) {
+
+                            memory[indexRegister + digit] = s.top();
+                            s.pop();
+                            digit++;
+                            
                         }
                         }
                         break;
