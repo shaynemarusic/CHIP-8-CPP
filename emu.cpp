@@ -22,6 +22,7 @@ int main(int argc, char *argv []) {
     unsigned short indexRegister;
     //Used for calling functions/subroutines
     unsigned short stack [16];
+    short stackIndex = 0;
     //The program counter. Keeps track of which instruction should be fetched from memory. Program memory starts at 0x200
     unsigned short programCounter = 0x200;
     //Decremented at a rate of 60 Hz until it reaches 0
@@ -65,7 +66,9 @@ int main(int argc, char *argv []) {
         {SDL_SCANCODE_Z, 0xA}, {SDL_SCANCODE_X, 0}, {SDL_SCANCODE_C, 0xB}, {SDL_SCANCODE_V, 0xF}
     };
 
-    //printf("This is a test\n");
+    std::unordered_map<char, bool*> flags = {
+        {'l', &originalLeftShift}, {'r', &originalRightShift}, {'o', &originalOffsetJmp}
+    };
 
     //Loading font data into memory. Convention is to start storing the font data at 0x050 (0d80)
     for (unsigned int i = 0; i < 80; i++) {
@@ -74,7 +77,28 @@ int main(int argc, char *argv []) {
 
     }
 
-    //printf("memory[1]: %d\n", memory[1]);
+    //Deal with config flags
+    //If a flag is upper case use the modern behavior for that associated instruction
+    for (int i = 2; i < argc; i++) {
+
+        std::string flag = argv[i];
+        if (flag[0] != '-') {
+
+            printf("Invalid flag: %s. Option will be ignored. Prepend '-'\n", flag);
+
+        }
+        else {
+
+            for (int j = 1; j < flag.length(); j++) {
+
+                bool * config = flags[flag[j]];
+                *config = (isupper(flag[j])) ? false : true;
+
+            }
+
+        }
+        
+    }
 
     //Initialize SDL
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -191,6 +215,12 @@ int main(int argc, char *argv []) {
 
                         }
                         break;
+                    //Subroutine return - this instruction is called whenever a subroutine returns. Sets the program counter to the top of
+                    //the stack
+                    case 0x00EE:
+                        stackIndex--;
+                        programCounter = stack[stackIndex];
+                        break;
                     //Execute machine language routine - doesn't need to be implemented
                     default:
                         break;
@@ -200,7 +230,25 @@ int main(int argc, char *argv []) {
             case 0x10:
                 programCounter = (((short) upper & 0x0F) << 8) | lower;
                 break;
+            //Subroutine instruction - takes the form 2NNN. Calls the subroutine at memory address NNN; push the current PC onto the stack
+            //before jumping
             case 0x20:
+                {
+                if (stackIndex > 15) {
+
+                    printf("Error: stack overflow\n");
+                    running = false;
+
+                }
+                else {
+
+                    short num = (((short) upper & 0x0F) << 8) | lower;
+                    stack[stackIndex] = programCounter;
+                    programCounter = num;
+                    stackIndex++;
+
+                }
+                }
                 break;
             //Conditional jump instruction - takes the form 3XNN where if the value of VX == NN then the next instruction is skipped
             case 0x30:
@@ -512,7 +560,7 @@ int main(int argc, char *argv []) {
                             memory[indexRegister + digit] = s.top();
                             s.pop();
                             digit++;
-                            
+
                         }
                         }
                         break;
