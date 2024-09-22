@@ -56,9 +56,11 @@ int main(int argc, char *argv []) {
     //16 8 bit registers. Registers are labled V0 to VF. Note: VF is a special register that is used as a flag register
     Uint8 registers [16];
     //Used for configuration purposes
-    bool originalRightShift = true;
-    bool originalLeftShift = true;
-    bool originalOffsetJmp = true;
+    bool originalRightShift = false;
+    bool originalLeftShift = false;
+    bool originalOffsetJmp = false;
+    bool originalStore = false;
+    bool originalLoad = false;
 
     //Font data
     unsigned char font [80] = {
@@ -89,7 +91,7 @@ int main(int argc, char *argv []) {
     };
 
     std::unordered_map<char, bool*> flags = {
-        {'l', &originalLeftShift}, {'r', &originalRightShift}, {'o', &originalOffsetJmp}
+        {'l', &originalLeftShift}, {'r', &originalRightShift}, {'o', &originalOffsetJmp}, {'s', &originalStore}, {'d', &originalLoad}
     };
 
     //Loading font data into memory. Convention is to start storing the font data at 0x050 (0d80)
@@ -184,7 +186,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(".\\IBM Logo.ch8", std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -430,14 +432,16 @@ int main(int argc, char *argv []) {
                             if (originalLeftShift) {
 
                                 registers[X] = registers[Y];
-                                registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
+                                registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
                                 registers[X] << 1;
 
                             }
                             else {
 
-                                registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
+                                printf("VX value: %d\n", registers[X]);
+                                registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
                                 registers[X] << 1;
+                                printf("VF value: %d\n", registers[0x0F]);
 
                             }
                             break;
@@ -626,6 +630,7 @@ int main(int argc, char *argv []) {
                         //Store each individual digit of the number in VX starting at memory[indexRegister]
                         case 0x33:
                             {
+                            printf("VX: %d\n", registers[X]);
                             Uint8 num = registers[X];
                             Uint8 digit;
                             std::stack<Uint8> s;
@@ -642,13 +647,37 @@ int main(int argc, char *argv []) {
                             while (!s.empty()) {
 
                                 memory[indexRegister + digit] = s.top();
+                                printf("%d", s.top());
                                 s.pop();
                                 digit++;
 
                             }
+                            printf("\n");
                             }
                             break;
-                        
+                        //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+                        //Store instruction - stores all of the data in registers V0 to VX in memory at the address in the index register.
+                        //In the original implementation, this is done by incrementing the index register. In later implementations,
+                        //the index register isn't affected
+                        case 0x55:
+                            for (int i = 0; i <= X; i++) {
+
+                                memory[indexRegister + i] = registers[i];
+
+                            }
+                            indexRegister += (originalStore) ? X : 0;
+                            break;
+                        //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+                        //Load instruction - loads data into registers V0 to VX from memory at the address in index register. Like the store
+                        //instruction, the original implementation incremented the index register while later implementations did not
+                        case 0x65:
+                            for (int i = 0; i <= X; i++) {
+
+                                registers[i] = memory[indexRegister + i];
+
+                            }
+                            indexRegister += (originalLoad) ? X : 0;
+                            break;
                         
                     }
                     break;
