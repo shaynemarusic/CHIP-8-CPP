@@ -2,12 +2,31 @@
 #include "./SDL2/include/SDL.h"
 #include <fstream>
 #include <random>
+#include <atomic>
+#include <math.h>
 #include <unordered_map>
 #include <stack>
 
 #undef main
 
+//These constants are used to set the size of the SDL window
 const int SCREEN_WIDTH = 640, SCREEN_HEIGHT = 320, LOGICAL_WIDTH = 64, LOGICAL_HEIGHT = 32;
+//These constants are used for tone generation
+const int BUFFER_DURATION = 4, FREQUENCY = 50000, BUFFER_LEN = (FREQUENCY * BUFFER_DURATION);
+int buffer[BUFFER_LEN];
+
+std::atomic<int> bufferPos = 0;
+
+//Functions used for tone generation
+int format(double sample, double amplitude) {
+    return (int)(sample * 32567 * amplitude);
+}
+
+double tone(double hz, unsigned long time) {
+    return sin(time * hz * M_PI * 2 / FREQUENCY);
+}
+
+void playBuffer(void *userData, unsigned char *stream, int len);
 
 //TODO add command line args to take the name of ROM files to be loaded
 int main(int argc, char *argv []) {
@@ -104,6 +123,7 @@ int main(int argc, char *argv []) {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
 
         printf("Error initializing SDL: %s\n", SDL_GetError());
+        running = false;
 
     }
 
@@ -128,6 +148,22 @@ int main(int argc, char *argv []) {
     }
     
     SDL_RenderSetLogicalSize(render, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+    //Audio setup
+    SDL_AudioSpec want;
+    want.freq = FREQUENCY;
+    want.format = AUDIO_S16SYS;
+    want.channels = 1;
+    want.samples = 4096;
+    want.callback = playBuffer;
+    want.userdata = NULL;
+
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
+
+    
+    for (int i = 0; i < BUFFER_LEN; i++) {
+        buffer[i] = format(tone(440, i), 0.5);
+    }
 
     // //Test code
 
@@ -162,12 +198,20 @@ int main(int argc, char *argv []) {
     else {
 
         std::cout << "Error: ROM could not be opened. Please make sure the file path is correct." << std::endl;
-        return -1;
+        running = false;
 
     }
 
+    SDL_PauseAudioDevice(dev, 0);
+
     //The main loop
     while (running) {
+
+        if (bufferPos >= BUFFER_LEN) {
+
+            bufferPos = 0;
+            
+        }
 
         //Allows user to close window
         SDL_Event event;
@@ -177,6 +221,7 @@ int main(int argc, char *argv []) {
 
                 case SDL_QUIT:
                     running = false;
+                    SDL_CloseAudioDevice(dev);
                     break;
     
             }
@@ -581,4 +626,28 @@ int main(int argc, char *argv []) {
     delete [] memory;
 
     return 0;
+
+}
+
+//SDL_AudioCallback function
+//This code (and really most of the SDL_Audio related code) comes from https://gist.github.com/jacobsebek/10867cb10cdfccf1d6cfdd24fa23ee96
+void playBuffer(void *userdata, unsigned char *stream, int len) {
+
+    SDL_memset(stream, 0, len);
+
+    len /= 2;
+
+    len = (bufferPos + len < BUFFER_LEN) ? len : BUFFER_LEN - bufferPos;
+
+    if (len == 0) {
+
+        bufferPos = 0;
+        return;
+
+    }
+
+    SDL_memcpy(stream, buffer + bufferPos, len * 2);
+
+    bufferPos += len;
+
 }
