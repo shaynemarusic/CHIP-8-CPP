@@ -4,6 +4,7 @@
 #include <random>
 #include <atomic>
 #include <math.h>
+#include <chrono>
 #include <unordered_map>
 #include <stack>
 
@@ -45,9 +46,11 @@ int main(int argc, char *argv []) {
     //The program counter. Keeps track of which instruction should be fetched from memory. Program memory starts at 0x200
     unsigned short programCounter = 0x200;
     //Decremented at a rate of 60 Hz until it reaches 0
-    unsigned char delayTimer;
+    unsigned char delayTimer = 0;
     //Like the delay timer but it makes a sound when it's not 0
-    unsigned char soundTimer;
+    unsigned char soundTimer = 0;
+    double clockSpeed = 1000 / 700;
+    double timerSpeed = 1000 / 60;
     //Keeps the main loop running
     bool running = true;
     //16 8 bit registers. Registers are labled V0 to VF. Note: VF is a special register that is used as a flag register
@@ -162,7 +165,9 @@ int main(int argc, char *argv []) {
 
     
     for (int i = 0; i < BUFFER_LEN; i++) {
+
         buffer[i] = format(tone(440, i), 0.5);
+
     }
 
     // //Test code
@@ -202,7 +207,9 @@ int main(int argc, char *argv []) {
 
     }
 
-    SDL_PauseAudioDevice(dev, 0);
+    //SDL_PauseAudioDevice(dev, 0);
+    auto lastTime = std::chrono::high_resolution_clock::now();
+    auto lastTimerTime = lastTime;
 
     //The main loop
     while (running) {
@@ -211,6 +218,18 @@ int main(int argc, char *argv []) {
 
             bufferPos = 0;
             
+        }
+
+        //If the sound timer isn't 0, a tone is played
+        if (soundTimer > 0) {
+
+            SDL_PauseAudioDevice(dev, 0);
+
+        }
+        else {
+
+            SDL_PauseAudioDevice(dev, 1);
+
         }
 
         //Allows user to close window
@@ -228,338 +247,365 @@ int main(int argc, char *argv []) {
 
         }
 
-        //Fetch an instruction from memory
-        Uint8 upper, lower;
-        Uint16 instruction;
-        upper = memory[programCounter];
-        lower = memory[programCounter + 1];
+        //We need to do this to slow down the emulator
+        auto currentTime = std::chrono::high_resolution_clock::now();
 
-        //Increment program counter by two to prepare to fetch next instruction
-        programCounter += 2;
+        //Difference of times in milliseconds
+        auto diff = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(currentTime - lastTime).count();
+        auto timerDiff = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(currentTime - lastTimerTime).count();
 
-        //Instruction decode
-        //First nibble of the instruction determines which instruction category is being run
-        short X = upper & 0x0F;
-        short Y = (lower & 0xF0) >> 4;
-        switch (upper & 0xF0) {
+        //If 1/60th of a second has passed, decrement timers
+        if (timerDiff > timerSpeed) {
+            
+            delayTimer += (delayTimer > 0) ? -1 : 0;
+            soundTimer += (soundTimer > 0) ? -1 : 0;
+            lastTimerTime = currentTime;
 
-            //Execute machine language routine and clear screen instructions
-            case 0x00:
-                switch ((((short) upper & 0x0F) << 8) | (short) lower) {
-                    //Clear instruction - sets all pixels to off
-                    case 0x00E0:
-                        SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
-                        SDL_RenderClear(render);
-                        for (int i = 0; i < 64; i++) {
+        }
 
-                            for (int j = 0; j < 32; j++) {
+        if (diff > clockSpeed) {
 
-                                display[i][j] = false;
+            lastTime = currentTime;
+
+            //Fetch an instruction from memory
+            Uint8 upper, lower;
+            Uint16 instruction;
+            upper = memory[programCounter];
+            lower = memory[programCounter + 1];
+
+            //Increment program counter by two to prepare to fetch next instruction
+            programCounter += 2;
+
+            //Instruction decode
+            //First nibble of the instruction determines which instruction category is being run
+            short X = upper & 0x0F;
+            short Y = (lower & 0xF0) >> 4;
+            switch (upper & 0xF0) {
+
+                //Execute machine language routine and clear screen instructions
+                case 0x00:
+                    switch ((((short) upper & 0x0F) << 8) | (short) lower) {
+                        //Clear instruction - sets all pixels to off
+                        case 0x00E0:
+                            SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
+                            SDL_RenderClear(render);
+                            for (int i = 0; i < 64; i++) {
+
+                                for (int j = 0; j < 32; j++) {
+
+                                    display[i][j] = false;
+
+                                }
 
                             }
+                            break;
+                        //Subroutine return - this instruction is called whenever a subroutine returns. Sets the program counter to the top of
+                        //the stack
+                        case 0x00EE:
+                            stackIndex--;
+                            programCounter = stack[stackIndex];
+                            break;
+                        //Execute machine language routine - doesn't need to be implemented
+                        default:
+                            break;
+                    }
+                    break;
+                //Jump instruction - takes the form 1NNN where NNN is the address the program counter is set to
+                case 0x10:
+                    programCounter = (((short) upper & 0x0F) << 8) | lower;
+                    break;
+                //Subroutine instruction - takes the form 2NNN. Calls the subroutine at memory address NNN; push the current PC onto the stack
+                //before jumping
+                case 0x20:
+                    {
+                    if (stackIndex > 15) {
 
-                        }
-                        break;
-                    //Subroutine return - this instruction is called whenever a subroutine returns. Sets the program counter to the top of
-                    //the stack
-                    case 0x00EE:
-                        stackIndex--;
-                        programCounter = stack[stackIndex];
-                        break;
-                    //Execute machine language routine - doesn't need to be implemented
-                    default:
-                        break;
-                }
-                break;
-            //Jump instruction - takes the form 1NNN where NNN is the address the program counter is set to
-            case 0x10:
-                programCounter = (((short) upper & 0x0F) << 8) | lower;
-                break;
-            //Subroutine instruction - takes the form 2NNN. Calls the subroutine at memory address NNN; push the current PC onto the stack
-            //before jumping
-            case 0x20:
-                {
-                if (stackIndex > 15) {
+                        printf("Error: stack overflow\n");
+                        running = false;
 
-                    printf("Error: stack overflow\n");
-                    running = false;
+                    }
+                    else {
 
-                }
-                else {
+                        short num = (((short) upper & 0x0F) << 8) | lower;
+                        stack[stackIndex] = programCounter;
+                        programCounter = num;
+                        stackIndex++;
 
-                    short num = (((short) upper & 0x0F) << 8) | lower;
-                    stack[stackIndex] = programCounter;
-                    programCounter = num;
-                    stackIndex++;
+                    }
+                    }
+                    break;
+                //Conditional jump instruction - takes the form 3XNN where if the value of VX == NN then the next instruction is skipped
+                case 0x30:
+                    if (registers[X] == lower) {
 
-                }
-                }
-                break;
-            //Conditional jump instruction - takes the form 3XNN where if the value of VX == NN then the next instruction is skipped
-            case 0x30:
-                if (registers[X] == lower) {
+                        programCounter += 2;
 
-                    programCounter += 2;
+                    }
+                    break;
+                //Conditional jump instruction - takes the form 4XNN where if the values of VX != NN then the next instruction is skipped
+                case 0x40:
+                    if (registers[X] != lower) {
 
-                }
-                break;
-            //Conditional jump instruction - takes the form 4XNN where if the values of VX != NN then the next instruction is skipped
-            case 0x40:
-                if (registers[X] != lower) {
+                        programCounter += 2;
 
-                    programCounter += 2;
+                    }
+                    break;
+                //Conditional jump instruction - takes the form 5XY0 where if VX == VY then the next instruction is skipped
+                case 0x50:
+                    if (registers[X] == registers[Y]) {
 
-                }
-                break;
-            //Conditional jump instruction - takes the form 5XY0 where if VX == VY then the next instruction is skipped
-            case 0x50:
-                if (registers[X] == registers[Y]) {
+                        programCounter += 2;
 
-                    programCounter += 2;
+                    }
+                    break;
+                //Set register instruction - takes the form 6XNN; sets the register VX to the value NN
+                case 0x60:
+                    registers[X] = lower;
+                    break;
+                //Add instruction - takes the form 7XNN; adds NN to the register VX
+                case 0x70:
+                    registers[X] += lower;
+                    break;
+                //All 8000 instructions are arithmetic or logical - the exact instruction is determined by the lowest nibble; note that none of
+                //these instructions affect VY
+                case 0x80:
+                    switch (lower & 0x0F) {
 
-                }
-                break;
-            //Set register instruction - takes the form 6XNN; sets the register VX to the value NN
-            case 0x60:
-                registers[X] = lower;
-                break;
-            //Add instruction - takes the form 7XNN; adds NN to the register VX
-            case 0x70:
-                registers[X] += lower;
-                break;
-            //All 8000 instructions are arithmetic or logical - the exact instruction is determined by the lowest nibble; note that none of
-            //these instructions affect VY
-            case 0x80:
-                switch (lower & 0x0F) {
-
-                    //Set instruction - takes form 8XY0 and sets the value of VX to the value of VY
-                    case 0x00:
-                        registers[X] = registers[Y];
-                        break;
-                    //Binary OR instruction - takes form 8XY1 and sets the value of VX to VY | VX
-                    case 0x01:
-                        registers[X] = registers[X] | registers[Y];
-                        break;
-                    //Binary AND instruction - sets value of VX to VX & VY
-                    case 0x02:
-                        registers[X] = registers[X] & registers[Y];
-                        break;
-                    //Logical XOR - sets value of VX to VX XOR VY
-                    case 0x03:
-                        registers[X] = (~registers[X] & registers[Y]) | (registers[X] & ~registers[Y]);
-                        break;
-                    //Add - Sets the value of VX to VX + VY; affects carry flag
-                    case 0x04:
-                        {
-                        unsigned short prev = registers[X];
-                        registers[X] += registers[Y];
-                        registers[0xF] = (prev > registers[X]) ? 1 : 0;
-                        }
-                        break;
-                    //Subtract - sets the value of VX to VX - VY; VF is set to 1 if VX > VY
-                    case 0x05:
-                        registers[0xF] = (registers[X] > registers[Y]) ? 1 : 0;
-                        registers[X] -= registers[Y];
-                        break;
-                    //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
-                    //Right shift - in the original implementation, set VX = VY and shift VX right by one; set VF to the shifted bit
-                    //In later implementations, shift VX in place and ignore VY
-                    case 0x06:
-                        if (originalRightShift) {
-
+                        //Set instruction - takes form 8XY0 and sets the value of VX to the value of VY
+                        case 0x00:
                             registers[X] = registers[Y];
-                            registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
-                            registers[X] >> 1;
+                            break;
+                        //Binary OR instruction - takes form 8XY1 and sets the value of VX to VY | VX
+                        case 0x01:
+                            registers[X] = registers[X] | registers[Y];
+                            break;
+                        //Binary AND instruction - sets value of VX to VX & VY
+                        case 0x02:
+                            registers[X] = registers[X] & registers[Y];
+                            break;
+                        //Logical XOR - sets value of VX to VX XOR VY
+                        case 0x03:
+                            registers[X] = (~registers[X] & registers[Y]) | (registers[X] & ~registers[Y]);
+                            break;
+                        //Add - Sets the value of VX to VX + VY; affects carry flag
+                        case 0x04:
+                            {
+                            unsigned short prev = registers[X];
+                            registers[X] += registers[Y];
+                            registers[0xF] = (prev > registers[X]) ? 1 : 0;
+                            }
+                            break;
+                        //Subtract - sets the value of VX to VX - VY; VF is set to 1 if VX > VY
+                        case 0x05:
+                            registers[0xF] = (registers[X] > registers[Y]) ? 1 : 0;
+                            registers[X] -= registers[Y];
+                            break;
+                        //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+                        //Right shift - in the original implementation, set VX = VY and shift VX right by one; set VF to the shifted bit
+                        //In later implementations, shift VX in place and ignore VY
+                        case 0x06:
+                            if (originalRightShift) {
 
-                        }
-                        else {
+                                registers[X] = registers[Y];
+                                registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
+                                registers[X] >> 1;
 
-                            registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
-                            registers[X] >> 1;
-                            
-                        }
-                        break;
-                    //Subtract - sets the value of VX to VY - VX; VF is set to 1 if VX < VY
-                    case 0x07:
-                        registers[0xF] = (registers[X] < registers[Y]) ? 1 : 0;
-                        registers[X] = registers[Y] - registers[X];
-                        break;
-                    //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
-                    //Left shift - in the original implementation, set VX = VY and shift VX left by one; set VF to the shifted bit
-                    //In later implementations, shift VX in place and ignore VY
-                    case 0x0E:
-                        if (originalLeftShift) {
+                            }
+                            else {
 
-                            registers[X] = registers[Y];
-                            registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
-                            registers[X] << 1;
+                                registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
+                                registers[X] >> 1;
+                                
+                            }
+                            break;
+                        //Subtract - sets the value of VX to VY - VX; VF is set to 1 if VX < VY
+                        case 0x07:
+                            registers[0xF] = (registers[X] < registers[Y]) ? 1 : 0;
+                            registers[X] = registers[Y] - registers[X];
+                            break;
+                        //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+                        //Left shift - in the original implementation, set VX = VY and shift VX left by one; set VF to the shifted bit
+                        //In later implementations, shift VX in place and ignore VY
+                        case 0x0E:
+                            if (originalLeftShift) {
 
-                        }
-                        else {
+                                registers[X] = registers[Y];
+                                registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
+                                registers[X] << 1;
 
-                            registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
-                            registers[X] << 1;
+                            }
+                            else {
 
-                        }
-                        break;
+                                registers[0x0F] = ((registers[X] & 0x8000) == 0x8000) ? 1 : 0;
+                                registers[X] << 1;
 
-                }
-                break;
-            //Conditional jump instruction - takes the form 9XY0 where if VX != VY then the next instruction is skipped
-            case 0x90:
-                if (registers[X] != registers[Y]) {
+                            }
+                            break;
 
-                    programCounter += 2;
+                    }
+                    break;
+                //Conditional jump instruction - takes the form 9XY0 where if VX != VY then the next instruction is skipped
+                case 0x90:
+                    if (registers[X] != registers[Y]) {
 
-                }
-                break;
-            //Set index register instruction - takes the form ANNN; sets I to NNNN;
-            case 0xA0:
-                indexRegister = (((short) upper & 0x0F) << 8) | (short) lower;
-                break;
-            //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
-            //Jump with offset - Takes form DNNN in the original implementation; In the original implementation, jumps to address NNN plus
-            //the value of V0. In later implementations it takes the form DXNN and jumps to address XNN plus the value of VX
-            case 0xB0:
-                {
-                    int jmp = (((short) upper & 0x0F) << 8) | (short) lower;
-                    programCounter = (originalOffsetJmp) ? jmp + registers[0] : jmp + registers[X];
-                }
-                break;
-            //Generate random number - Takes form CXNN; generates a random number, ANDs it with NN and puts the value in VX
-            case 0xC0:
-                {
-                std::random_device dev;
-                std::mt19937 rng(dev());
-                std::uniform_int_distribution<std::mt19937::result_type> dist(-32768, 32767);
-                registers[X] = dist(rng) & lower;
-                }
-                break;
-            //Display instruction - takes the form DXYN; draws an N pixel tall sprite from the memory location stored at the index register
-            //to the horizontal coordinate stored in VX and vertical coordinate stored in VY. If any pixels are turned off, then VF is set
-            //to 1 (otherwise set to 0)
-            case 0xD0:
-                {
-                char N = lower & 0x0F;
-                short xCoord = registers[X] & 63;
-                short yCoord = registers[Y] & 31;
-                
-                registers[0xF] = 0;
+                        programCounter += 2;
 
-                for (unsigned int i = 0; i < N; i++) {
+                    }
+                    break;
+                //Set index register instruction - takes the form ANNN; sets I to NNNN;
+                case 0xA0:
+                    indexRegister = (((short) upper & 0x0F) << 8) | (short) lower;
+                    break;
+                //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
+                //Jump with offset - Takes form DNNN in the original implementation; In the original implementation, jumps to address NNN plus
+                //the value of V0. In later implementations it takes the form DXNN and jumps to address XNN plus the value of VX
+                case 0xB0:
+                    {
+                        int jmp = (((short) upper & 0x0F) << 8) | (short) lower;
+                        programCounter = (originalOffsetJmp) ? jmp + registers[0] : jmp + registers[X];
+                    }
+                    break;
+                //Generate random number - Takes form CXNN; generates a random number, ANDs it with NN and puts the value in VX
+                case 0xC0:
+                    {
+                    std::random_device dev;
+                    std::mt19937 rng(dev());
+                    std::uniform_int_distribution<std::mt19937::result_type> dist(-32768, 32767);
+                    registers[X] = dist(rng) & lower;
+                    }
+                    break;
+                //Display instruction - takes the form DXYN; draws an N pixel tall sprite from the memory location stored at the index register
+                //to the horizontal coordinate stored in VX and vertical coordinate stored in VY. If any pixels are turned off, then VF is set
+                //to 1 (otherwise set to 0)
+                case 0xD0:
+                    {
+                    char N = lower & 0x0F;
+                    short xCoord = registers[X] & 63;
+                    short yCoord = registers[Y] & 31;
+                    
+                    registers[0xF] = 0;
 
-                    if (Y + i > 31) break;
+                    for (unsigned int i = 0; i < N; i++) {
 
-                    char spriteData = memory[indexRegister + i];
+                        if (Y + i > 31) break;
 
-                    for (unsigned int j = 0; j < 8; j++) {
+                        char spriteData = memory[indexRegister + i];
 
-                        if (xCoord + j > 63) break;
+                        for (unsigned int j = 0; j < 8; j++) {
 
-                        //If the pixel is already on and the pixel in the sprite row is on, turn off the pixel and set VF to 1
-                        if (display[xCoord + j][yCoord + i] && ((spriteData << j) & 0x80) == 0x80) {
+                            if (xCoord + j > 63) break;
 
-                            registers[0xF] = 1;
-                            display[xCoord + j][yCoord + i] = false;
-                            SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
-                            SDL_RenderDrawPoint(render, xCoord + j, yCoord + i);
+                            //If the pixel is already on and the pixel in the sprite row is on, turn off the pixel and set VF to 1
+                            if (display[xCoord + j][yCoord + i] && ((spriteData << j) & 0x80) == 0x80) {
 
-                        }
-                        //If the pixel in the sprite row is on but not already on, turn the pixel on
-                        else if (((spriteData << j) & 0x80) == 0x80) {
+                                registers[0xF] = 1;
+                                display[xCoord + j][yCoord + i] = false;
+                                SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
+                                SDL_RenderDrawPoint(render, xCoord + j, yCoord + i);
 
-                            display[xCoord + j][yCoord + i] = true;
-                            SDL_SetRenderDrawColor(render, 255, 255, 255, 255);
-                            SDL_RenderDrawPoint(render, xCoord + j, yCoord + i);
+                            }
+                            //If the pixel in the sprite row is on but not already on, turn the pixel on
+                            else if (((spriteData << j) & 0x80) == 0x80) {
+
+                                display[xCoord + j][yCoord + i] = true;
+                                SDL_SetRenderDrawColor(render, 255, 255, 255, 255);
+                                SDL_RenderDrawPoint(render, xCoord + j, yCoord + i);
+
+                            }
 
                         }
 
                     }
 
-                }
+                    SDL_RenderPresent(render);
 
-                SDL_RenderPresent(render);
+                    }
+                    break;
+                //Skip if instructions - both instructions skip based on if a key is currently being pressed or not
+                //CHIP 8 uses a hexidecimal keypad so each code corresponds to a hex digit
+                case 0xE0:
+                    switch (lower) {
+                        //Skip if key pressed - takes form EX9E; skips the next instruction if the key corresponding to the number in VX
+                        //is pressed
+                        case 0x9E:
+                            {
+                            if (SDL_PollEvent(&event)) {
 
-                }
-                break;
-            //Skip if instructions - both instructions skip based on if a key is currently being pressed or not
-            //CHIP 8 uses a hexidecimal keypad so each code corresponds to a hex digit
-            case 0xE0:
-                switch (lower) {
-                    //Skip if key pressed - takes form EX9E; skips the next instruction if the key corresponding to the number in VX
-                    //is pressed
-                    case 0x9E:
-                        {
-                        if (SDL_PollEvent(&event)) {
+                                if (event.type == SDL_KEYDOWN) {
 
-                            if (event.type == SDL_KEYDOWN) {
+                                    SDL_Scancode sc = event.key.keysym.scancode;
+                                    short hxVal = scanCodes[sc];
+                                    programCounter += (hxVal == registers[X]) ? 2 : 0;
 
-                                SDL_Scancode sc = event.key.keysym.scancode;
-                                short hxVal = scanCodes[sc];
-                                programCounter += (hxVal == registers[X]) ? 2 : 0;
-
-                            }
-
-                        }
-                        }
-                        break;
-                    //Skip if not key pressed - takes form EXA1; skips the next instruction if the key corresponding to the number in VX
-                    //is not being pressed
-                    case 0xA1:
-                        {
-                        if (SDL_PollEvent(&event)) {
-
-                            if (event.type == SDL_KEYDOWN) {
-
-                                SDL_Scancode sc = event.key.keysym.scancode;
-                                short hxVal = scanCodes[sc];
-                                programCounter += (hxVal != registers[X]) ? 2 : 0;
+                                }
 
                             }
+                            }
+                            break;
+                        //Skip if not key pressed - takes form EXA1; skips the next instruction if the key corresponding to the number in VX
+                        //is not being pressed
+                        case 0xA1:
+                            {
+                            if (SDL_PollEvent(&event)) {
 
-                        }
-                        }
-                        break;
-                }
-                break;
-            //Timers and miscellaneous instructions
-            //All of these instructions take the form FX~~; in other words, they all interpret the 3rd nibble as a register
-            case 0xF0:
-                switch (lower) {
-                    //These first three are timer related instructions
-                    //Sets VX equal to the value of the delay timer
-                    case 0x07:
-                        registers[X] = delayTimer;
-                        break;
-                    //Sets the delay timer equal to value in VX
-                    case 0x15:
-                        delayTimer = registers[X];
-                        break;
-                    //Sets the sound timer to the value in VX
-                    case 0x18:
-                        soundTimer = registers[X];
-                        break;
-                    //Add the value in VX to I
-                    //NOTE: in the original implementation this did not affect VF but this implementation will since some later
-                    //implementations expect this behavior
-                    case 0x1E:
-                        {
-                        unsigned short prev = indexRegister;
-                        indexRegister += registers[X];
-                        registers[0xF] = (prev > indexRegister) ? 1 : 0;
-                        }
-                        break;
-                    //Get key - this instruction blocks until a key is pressed (timers are still decremented regularly); once a key is
-                    //pressed its hex value is put in VX
-                    case 0x0A:
-                        {
-                        if (SDL_PollEvent(&event)) {
+                                if (event.type == SDL_KEYDOWN) {
 
-                            if (event.type == SDL_KEYDOWN) {
+                                    SDL_Scancode sc = event.key.keysym.scancode;
+                                    short hxVal = scanCodes[sc];
+                                    programCounter += (hxVal != registers[X]) ? 2 : 0;
 
-                                SDL_Scancode sc = event.key.keysym.scancode;
-                                int hxVal = scanCodes[sc];
-                                registers[X] = hxVal;
+                                }
+
+                            }
+                            }
+                            break;
+                    }
+                    break;
+                //Timers and miscellaneous instructions
+                //All of these instructions take the form FX~~; in other words, they all interpret the 3rd nibble as a register
+                case 0xF0:
+                    switch (lower) {
+                        //These first three are timer related instructions
+                        //Sets VX equal to the value of the delay timer
+                        case 0x07:
+                            registers[X] = delayTimer;
+                            break;
+                        //Sets the delay timer equal to value in VX
+                        case 0x15:
+                            delayTimer = registers[X];
+                            break;
+                        //Sets the sound timer to the value in VX
+                        case 0x18:
+                            soundTimer = registers[X];
+                            break;
+                        //Add the value in VX to I
+                        //NOTE: in the original implementation this did not affect VF but this implementation will since some later
+                        //implementations expect this behavior
+                        case 0x1E:
+                            {
+                            unsigned short prev = indexRegister;
+                            indexRegister += registers[X];
+                            registers[0xF] = (prev > indexRegister) ? 1 : 0;
+                            }
+                            break;
+                        //Get key - this instruction blocks until a key is pressed (timers are still decremented regularly); once a key is
+                        //pressed its hex value is put in VX
+                        case 0x0A:
+                            {
+                            if (SDL_PollEvent(&event)) {
+
+                                if (event.type == SDL_KEYDOWN) {
+
+                                    SDL_Scancode sc = event.key.keysym.scancode;
+                                    int hxVal = scanCodes[sc];
+                                    registers[X] = hxVal;
+
+                                }
+                                else {
+
+                                    programCounter -= 2;
+
+                                }
 
                             }
                             else {
@@ -567,52 +613,47 @@ int main(int argc, char *argv []) {
                                 programCounter -= 2;
 
                             }
+                            }
+                            break;
+                        //Sets the index register to the address of the hex character in VX (meaning the character's font data); use the last
+                        //nibble of VX
+                        case 0x29:
+                            {
+                            int hexVal = registers[X] & 0xF;
+                            indexRegister = 80 + hexVal * 5;
+                            }
+                            break;
+                        //Store each individual digit of the number in VX starting at memory[indexRegister]
+                        case 0x33:
+                            {
+                            Uint8 num = registers[X];
+                            Uint8 digit;
+                            std::stack<Uint8> s;
+                            while (num > 0) {
 
-                        }
-                        else {
+                                digit = num % 10;
+                                s.push(digit);
+                                num /= 10;
 
-                            programCounter -= 2;
+                            }
 
-                        }
-                        }
-                        break;
-                    //Sets the index register to the address of the hex character in VX (meaning the character's font data); use the last
-                    //nibble of VX
-                    case 0x29:
-                        {
-                        int hexVal = registers[X] & 0xF;
-                        indexRegister = 80 + hexVal * 5;
-                        }
-                        break;
-                    //Store each individual digit of the number in VX starting at memory[indexRegister]
-                    case 0x33:
-                        {
-                        Uint8 num = registers[X];
-                        Uint8 digit;
-                        std::stack<Uint8> s;
-                        while (num > 0) {
+                            digit = 0;
 
-                            digit = num % 10;
-                            s.push(digit);
-                            num /= 10;
+                            while (!s.empty()) {
 
-                        }
+                                memory[indexRegister + digit] = s.top();
+                                s.pop();
+                                digit++;
 
-                        digit = 0;
+                            }
+                            }
+                            break;
+                        
+                        
+                    }
+                    break;
 
-                        while (!s.empty()) {
-
-                            memory[indexRegister + digit] = s.top();
-                            s.pop();
-                            digit++;
-
-                        }
-                        }
-                        break;
-                    
-                    
-                }
-                break;
+            }
 
         }
 
