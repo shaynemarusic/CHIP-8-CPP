@@ -438,10 +438,8 @@ int main(int argc, char *argv []) {
                             }
                             else {
 
-                                printf("VX value: %d\n", registers[X]);
                                 registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
                                 registers[X] << 1;
-                                printf("VF value: %d\n", registers[0x0F]);
 
                             }
                             break;
@@ -630,7 +628,6 @@ int main(int argc, char *argv []) {
                         //Store each individual digit of the number in VX starting at memory[indexRegister]
                         case 0x33:
                             {
-                            printf("VX: %d\n", registers[X]);
                             Uint8 num = registers[X];
                             Uint8 digit;
                             std::stack<Uint8> s;
@@ -647,12 +644,10 @@ int main(int argc, char *argv []) {
                             while (!s.empty()) {
 
                                 memory[indexRegister + digit] = s.top();
-                                printf("%d", s.top());
                                 s.pop();
                                 digit++;
 
                             }
-                            printf("\n");
                             }
                             break;
                         //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
