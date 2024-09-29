@@ -215,7 +215,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(".\\PONG", std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(".\\3-corax+.ch8", std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -670,22 +670,33 @@ int main(int argc, char *argv []) {
                             indexRegister = 80 + hexVal * 5;
                             }
                             break;
-                        //Store each individual digit of the number in VX starting at memory[indexRegister]
+                        //Store each individual digit of the number in VX starting at memory[indexRegister]; in other words, store the Binary
+                        //Coded Decimal value of the number
                         //Verified
                         case 0x33:
                             {
                             Uint8 num = registers[X];
                             Uint8 digit;
                             std::stack<Uint8> s;
+                            int iter = 3;
                             while (num > 0) {
 
                                 digit = num % 10;
                                 s.push(digit);
                                 num /= 10;
+                                iter--;
 
                             }
 
                             digit = 0;
+
+                            while (iter > 0) {
+
+                                memory[indexRegister + digit] = 0;
+                                iter--;
+                                digit++;
+                                
+                            }
 
                             while (!s.empty()) {
 
