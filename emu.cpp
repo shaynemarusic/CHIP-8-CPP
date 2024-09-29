@@ -35,6 +35,7 @@ int main(int argc, char *argv []) {
     //RAM - 4096 bytes or 4 kB
     //Program space starts at address 200
     char * memory = new char[4096];
+    std::fill_n(memory, 4096, 0);
     //64x32 pixel display which can be either black or white; this is used to track which pixels are on or off easily
     bool display [64][32];
     for (int i = 0; i < 64; i++) {
@@ -51,6 +52,7 @@ int main(int argc, char *argv []) {
     unsigned short indexRegister;
     //Used for calling functions/subroutines
     unsigned short stack [16];
+    std::fill_n(stack, 16, 0);
     short stackIndex = 0;
     //The program counter. Keeps track of which instruction should be fetched from memory. Program memory starts at 0x200
     unsigned short programCounter = 0x200;
@@ -125,8 +127,17 @@ int main(int argc, char *argv []) {
 
             for (int j = 1; j < flag.length(); j++) {
 
-                bool * config = flags[flag[j]];
-                *config = (isupper(flag[j])) ? false : true;
+                if (flags.find(tolower(flag[j])) != flags.end()) {
+
+                    bool * config = flags[tolower(flag[j])];
+                    *config = (isupper(flag[j])) ? false : true;
+
+                }
+                else {
+
+                    printf("Invalid flag: %c. Option will be ignored\n", flag[j]);
+
+                }
 
             }
 
@@ -196,7 +207,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(".\\test_opcode.ch8", std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -431,13 +442,13 @@ int main(int argc, char *argv []) {
 
                                 registers[X] = registers[Y];
                                 registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
-                                registers[X] >> 1;
+                                registers[X] = registers[X] >> 1;
 
                             }
                             else {
 
                                 registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
-                                registers[X] >> 1;
+                                registers[X] = registers[X] >> 1;
                                 
                             }
                             break;
@@ -456,13 +467,13 @@ int main(int argc, char *argv []) {
 
                                 registers[X] = registers[Y];
                                 registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
-                                registers[X] << 1;
+                                registers[X] = registers[X] << 1;
 
                             }
                             else {
 
                                 registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
-                                registers[X] << 1;
+                                registers[X] = registers[X] << 1;
 
                             }
                             break;
