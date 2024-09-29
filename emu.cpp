@@ -215,7 +215,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(".\\3-corax+.ch8", std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -442,51 +442,65 @@ int main(int argc, char *argv []) {
                         //Subtract - sets the value of VX to VX - VY; VF is set to 1 if VX > VY
                         //Verified
                         case 0x05:
-                            registers[0xF] = (registers[X] > registers[Y]) ? 1 : 0;
+                            {
+                            unsigned short prev = registers[X];
                             registers[X] -= registers[Y];
+                            registers[0xF] = (prev >= registers[Y]) ? 1 : 0;
+                            }
                             break;
                         //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
                         //Right shift - in the original implementation, set VX = VY and shift VX right by one; set VF to the shifted bit
                         //In later implementations, shift VX in place and ignore VY
                         //Verified
                         case 0x06:
+                            {
                             if (originalRightShift) {
 
                                 registers[X] = registers[Y];
-                                registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
+                                unsigned short prev = registers[X];
                                 registers[X] = registers[X] >> 1;
+                                registers[0x0F] = ((prev & 1) == 1) ? 1 : 0;
 
                             }
                             else {
 
-                                registers[0x0F] = ((registers[X] & 1) == 1) ? 1 : 0;
+                                unsigned short prev = registers[X];
                                 registers[X] = registers[X] >> 1;
+                                registers[0x0F] = ((prev & 1) == 1) ? 1 : 0;
                                 
+                            }
                             }
                             break;
                         //Subtract - sets the value of VX to VY - VX; VF is set to 1 if VX < VY
                         //Verified
                         case 0x07:
-                            registers[0xF] = (registers[X] < registers[Y]) ? 1 : 0;
+                            {
+                            unsigned short prev = registers[X];
                             registers[X] = registers[Y] - registers[X];
+                            registers[0xF] = (prev <= registers[Y]) ? 1 : 0;
+                            }
                             break;
                         //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
                         //Left shift - in the original implementation, set VX = VY and shift VX left by one; set VF to the shifted bit
                         //In later implementations, shift VX in place and ignore VY
                         //Verified
                         case 0x0E:
+                            {
                             if (originalLeftShift) {
 
                                 registers[X] = registers[Y];
-                                registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
+                                unsigned short prev = registers[X];
                                 registers[X] = registers[X] << 1;
+                                registers[0x0F] = ((prev & 128) == 128) ? 1 : 0;
 
                             }
                             else {
 
-                                registers[0x0F] = ((registers[X] & 128) == 128) ? 1 : 0;
+                                unsigned short prev = registers[X];
                                 registers[X] = registers[X] << 1;
+                                registers[0x0F] = ((prev & 128) == 128) ? 1 : 0;
 
+                            }
                             }
                             break;
 
