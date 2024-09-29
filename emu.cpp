@@ -94,8 +94,16 @@ int main(int argc, char *argv []) {
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
 
-    //Maps SDL2 scancodes to the hex digits they would correspond to on a hex keypad
-    std::unordered_map<int, int> scanCodes = {
+    //Maps hex digits to the SDL2 scancodes they correspond to
+    std::unordered_map<int, int> hexToScan = {
+        {1, SDL_SCANCODE_1}, {2, SDL_SCANCODE_2}, {3, SDL_SCANCODE_3}, {0xC, SDL_SCANCODE_4},
+        {4, SDL_SCANCODE_Q}, {5, SDL_SCANCODE_W}, {6, SDL_SCANCODE_E}, {0xD, SDL_SCANCODE_R},
+        {7, SDL_SCANCODE_A}, {8, SDL_SCANCODE_S}, {9, SDL_SCANCODE_D}, {0xE, SDL_SCANCODE_F},
+        {0xA, SDL_SCANCODE_Z}, {0, SDL_SCANCODE_X}, {0xB, SDL_SCANCODE_C}, {0xF, SDL_SCANCODE_V}
+    };
+
+    //Maps SDL2 scancodes to the hex digits they correspond to
+    std::unordered_map<int, int> scanToHex = {
         {SDL_SCANCODE_1, 1}, {SDL_SCANCODE_2, 2}, {SDL_SCANCODE_3, 3}, {SDL_SCANCODE_4, 0xC},
         {SDL_SCANCODE_Q, 4}, {SDL_SCANCODE_W, 5}, {SDL_SCANCODE_E, 6}, {SDL_SCANCODE_R, 0xD},
         {SDL_SCANCODE_A, 7}, {SDL_SCANCODE_S, 8}, {SDL_SCANCODE_D, 9}, {SDL_SCANCODE_F, 0xE},
@@ -207,7 +215,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(".\\PONG", std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -233,6 +241,10 @@ int main(int argc, char *argv []) {
     //SDL_PauseAudioDevice(dev, 0);
     auto lastTime = std::chrono::high_resolution_clock::now();
     auto lastTimerTime = lastTime;
+
+    //Used for input handling
+    int keyArrSize = 0;
+    const Uint8 * keyState = SDL_GetKeyboardState(&keyArrSize);
 
     //The main loop
     while (running) {
@@ -481,6 +493,7 @@ int main(int argc, char *argv []) {
                     }
                     break;
                 //Conditional jump instruction - takes the form 9XY0 where if VX != VY then the next instruction is skipped
+                //Verified
                 case 0x90:
                     if (registers[X] != registers[Y]) {
 
@@ -514,6 +527,7 @@ int main(int argc, char *argv []) {
                 //Display instruction - takes the form DXYN; draws an N pixel tall sprite from the memory location stored at the index register
                 //to the horizontal coordinate stored in VX and vertical coordinate stored in VY. If any pixels are turned off, then VF is set
                 //to 1 (otherwise set to 0)
+                //Verified
                 case 0xD0:
                     {
                     char N = lower & 0x0F;
@@ -566,34 +580,28 @@ int main(int argc, char *argv []) {
                         //is pressed
                         case 0x9E:
                             {
-                            if (SDL_PollEvent(&event)) {
+                            if (keyState[hexToScan[registers[X]]] == 1) {
 
-                                if (event.type == SDL_KEYDOWN) {
-
-                                    SDL_Scancode sc = event.key.keysym.scancode;
-                                    short hxVal = scanCodes[sc];
-                                    programCounter += (hxVal == registers[X]) ? 2 : 0;
-
-                                }
+                                programCounter += 2;
 
                             }
+                            // short hxVal = scanCodes[sc];
+                            // programCounter += (hxVal == registers[X]) ? 2 : 0;
+                            //sc = SDL_SCANCODE_0;
                             }
                             break;
                         //Skip if not key pressed - takes form EXA1; skips the next instruction if the key corresponding to the number in VX
                         //is not being pressed
                         case 0xA1:
                             {
-                            if (SDL_PollEvent(&event)) {
+                            if (keyState[hexToScan[registers[X]]] == 0) {
 
-                                if (event.type == SDL_KEYDOWN) {
-
-                                    SDL_Scancode sc = event.key.keysym.scancode;
-                                    short hxVal = scanCodes[sc];
-                                    programCounter += (hxVal != registers[X]) ? 2 : 0;
-
-                                }
-
+                                programCounter += 2;
+                                
                             }
+                            // short hxVal = scanCodes[sc];
+                            // programCounter += (hxVal != registers[X]) ? 2 : 0;
+                            //sc = SDL_SCANCODE_0;
                             }
                             break;
                     }
@@ -629,20 +637,22 @@ int main(int argc, char *argv []) {
                         //pressed its hex value is put in VX
                         case 0x0A:
                             {
-                            if (SDL_PollEvent(&event)) {
+                                int hxVal = 0x10;
 
-                                if (event.type == SDL_KEYDOWN) {
+                            for (auto iter : hexToScan) {
 
-                                    SDL_Scancode sc = event.key.keysym.scancode;
-                                    int hxVal = scanCodes[sc];
-                                    registers[X] = hxVal;
+                                if (keyState[iter.second] == 1) {
 
-                                }
-                                else {
-
-                                    programCounter -= 2;
+                                    hxVal = iter.first;
+                                    break;
 
                                 }
+
+                            }
+
+                            if (hxVal != 0x10) {
+
+                                registers[X] = hxVal;
 
                             }
                             else {
