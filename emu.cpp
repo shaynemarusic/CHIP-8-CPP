@@ -35,8 +35,17 @@ int main(int argc, char *argv []) {
     //RAM - 4096 bytes or 4 kB
     //Program space starts at address 200
     char * memory = new char[4096];
-    //64x32 pixel display which can be either black or white
+    //64x32 pixel display which can be either black or white; this is used to track which pixels are on or off easily
     bool display [64][32];
+    for (int i = 0; i < 64; i++) {
+
+        for (int j = 0; j < 32; j++) {
+
+            display[i][j] = false;
+
+        }
+
+    }
     //Points to locations in memory - 16 bits/2 bytes
     //Also called I
     unsigned short indexRegister;
@@ -55,6 +64,7 @@ int main(int argc, char *argv []) {
     bool running = true;
     //16 8 bit registers. Registers are labled V0 to VF. Note: VF is a special register that is used as a flag register
     Uint8 registers [16];
+    std::fill_n(registers, 16, 0);
     //Used for configuration purposes
     bool originalRightShift = false;
     bool originalLeftShift = false;
@@ -186,7 +196,7 @@ int main(int argc, char *argv []) {
 
     //Load the ROM data into memory
     std::fstream rom;
-    rom.open(argv[1], std::ios::in | std::ios::binary | std::ios::ate);
+    rom.open(".\\test_opcode.ch8", std::ios::in | std::ios::binary | std::ios::ate);
 
     if (rom.is_open()) {
 
@@ -291,6 +301,7 @@ int main(int argc, char *argv []) {
                         case 0x00E0:
                             SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
                             SDL_RenderClear(render);
+                            SDL_RenderPresent(render);
                             for (int i = 0; i < 64; i++) {
 
                                 for (int j = 0; j < 32; j++) {
@@ -337,6 +348,7 @@ int main(int argc, char *argv []) {
                     }
                     break;
                 //Conditional jump instruction - takes the form 3XNN where if the value of VX == NN then the next instruction is skipped
+                //Verified
                 case 0x30:
                     if (registers[X] == lower) {
 
@@ -345,6 +357,7 @@ int main(int argc, char *argv []) {
                     }
                     break;
                 //Conditional jump instruction - takes the form 4XNN where if the values of VX != NN then the next instruction is skipped
+                //Verified
                 case 0x40:
                     if (registers[X] != lower) {
 
@@ -353,6 +366,7 @@ int main(int argc, char *argv []) {
                     }
                     break;
                 //Conditional jump instruction - takes the form 5XY0 where if VX == VY then the next instruction is skipped
+                //Verified
                 case 0x50:
                     if (registers[X] == registers[Y]) {
 
@@ -361,10 +375,12 @@ int main(int argc, char *argv []) {
                     }
                     break;
                 //Set register instruction - takes the form 6XNN; sets the register VX to the value NN
+                //Verified
                 case 0x60:
                     registers[X] = lower;
                     break;
                 //Add instruction - takes the form 7XNN; adds NN to the register VX
+                //Verified
                 case 0x70:
                     registers[X] += lower;
                     break;
@@ -378,14 +394,17 @@ int main(int argc, char *argv []) {
                             registers[X] = registers[Y];
                             break;
                         //Binary OR instruction - takes form 8XY1 and sets the value of VX to VY | VX
+                        //Verified
                         case 0x01:
                             registers[X] = registers[X] | registers[Y];
                             break;
                         //Binary AND instruction - sets value of VX to VX & VY
+                        //Verified
                         case 0x02:
                             registers[X] = registers[X] & registers[Y];
                             break;
                         //Logical XOR - sets value of VX to VX XOR VY
+                        //Verified
                         case 0x03:
                             registers[X] = (~registers[X] & registers[Y]) | (registers[X] & ~registers[Y]);
                             break;
@@ -398,6 +417,7 @@ int main(int argc, char *argv []) {
                             }
                             break;
                         //Subtract - sets the value of VX to VX - VY; VF is set to 1 if VX > VY
+                        //Verified
                         case 0x05:
                             registers[0xF] = (registers[X] > registers[Y]) ? 1 : 0;
                             registers[X] -= registers[Y];
@@ -405,6 +425,7 @@ int main(int argc, char *argv []) {
                         //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
                         //Right shift - in the original implementation, set VX = VY and shift VX right by one; set VF to the shifted bit
                         //In later implementations, shift VX in place and ignore VY
+                        //Verified
                         case 0x06:
                             if (originalRightShift) {
 
@@ -421,6 +442,7 @@ int main(int argc, char *argv []) {
                             }
                             break;
                         //Subtract - sets the value of VX to VY - VX; VF is set to 1 if VX < VY
+                        //Verified
                         case 0x07:
                             registers[0xF] = (registers[X] < registers[Y]) ? 1 : 0;
                             registers[X] = registers[Y] - registers[X];
@@ -428,6 +450,7 @@ int main(int argc, char *argv []) {
                         //THIS INSTRUCTION IS DIFFERENT IN SOME IMPLEMENTATIONS
                         //Left shift - in the original implementation, set VX = VY and shift VX left by one; set VF to the shifted bit
                         //In later implementations, shift VX in place and ignore VY
+                        //Verified
                         case 0x0E:
                             if (originalLeftShift) {
 
@@ -455,6 +478,7 @@ int main(int argc, char *argv []) {
                     }
                     break;
                 //Set index register instruction - takes the form ANNN; sets I to NNNN;
+                //Verified
                 case 0xA0:
                     indexRegister = (((short) upper & 0x0F) << 8) | (short) lower;
                     break;
@@ -626,6 +650,7 @@ int main(int argc, char *argv []) {
                             }
                             break;
                         //Store each individual digit of the number in VX starting at memory[indexRegister]
+                        //Verified
                         case 0x33:
                             {
                             Uint8 num = registers[X];
